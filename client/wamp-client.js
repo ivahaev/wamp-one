@@ -54,6 +54,7 @@
         self._closeHandler = self._closeHandler.bind(self);
         self._errorHandler = self._errorHandler.bind(self);
         self._messageHandler = self._messageHandler.bind(self);
+        self.badConnection = false;
         self.close = self._close.bind(self);
         self.onclose = null;
         self.open = self.connect = self._connect.bind(self);
@@ -122,17 +123,27 @@
 
     /**
      * Отправка запроса на сервер
-     * @param url
-     * @param callback - callback, который вызовется, когда придет ответ с сервера
+     * Первый параметр - url, затем необходимые данные,
+     * последним параметром может быть коллбэк, который вызовется в случае ответа с сервера.
      * @private
      */
-    WampClient.prototype._call = function (url, callback) {
+    WampClient.prototype._call = function () {
+        if (!arguments.length) {
+            throw new Error('Not enough arguments');
+        }
         var self = this,
             callId = helpers.newGuid();
         if (self._wsClient.readyState === wsStates.OPEN) {
+            var url = arguments[0];
+            var callback = function(){};
+            var lastParamIndex = arguments.length;
+            if (typeof arguments[arguments.length - 1] === 'function') {
+                callback = arguments[arguments.length - 1];
+                lastParamIndex--;
+            }
             self._callHandlers[callId] = callback;
             var callData = [msgTypes.CALL, callId, url];
-            callData = callData.concat(Array.prototype.slice.call(arguments, 2));
+            callData = callData.concat(Array.prototype.slice.call(arguments, 1, lastParamIndex));
             self._wsClient.send(JSON.stringify(callData));
         } else {
             throw new Error('WebSocket not connected');
@@ -182,7 +193,7 @@
                 break;
             case msgTypes.CALLRESULT:
                 if (typeof self._callHandlers[id] === 'function') {
-                    self._callHandlers[id](msgData);
+                    self._callHandlers[id](null, msgData);
                 }
                 if (typeof self._callHandlers[id] !== 'undefined') {
                     delete self._callHandlers[id];
@@ -195,7 +206,7 @@
                     details: data.length > 4 ? data[4] : null
                 };
                 if (typeof self._callHandlers[id] === 'function') {
-                    self._callHandlers[id](null, err);
+                    self._callHandlers[id](err, null);
                 }
                 if (typeof self._callHandlers[id] !== 'undefined') {
                     delete self._callHandlers[id];
@@ -223,6 +234,7 @@
         if (typeof self.onopen === 'function') {
             self.onopen();
         }
+        self.badConnection = false;
     };
 
     WampClient.prototype._closeHandler = function (closeEvent) {
@@ -238,6 +250,7 @@
         if (typeof self.onclose === 'function') {
             self.onclose();
         }
+        self.badConnection = false;
     };
 
     WampClient.prototype._startReconnect = function () {
@@ -264,6 +277,7 @@
                 hbCounter = 0;
             });
             hbCounter++;
+            self.badConnection = hbCounter > 1;
             if (hbCounter > 5) {
                 self._close();
             }
