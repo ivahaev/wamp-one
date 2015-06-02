@@ -1,5 +1,5 @@
-// Wamp-one wamp-client.js 1.0.1
-// (c) 2015 Samorukov Valentin, Kuvshinov Evgeniy
+// Wamp-one wamp-client.js 1.0.8
+// (c) 2015 Samorukov Valentin, Kuvshinov Evgeniy, Ivakha Eveniy
 // Wamp-one may be freely distributed under the MIT license.
 (function () {
 
@@ -39,13 +39,14 @@
         }
     };
 
-    var WampClient = function (heartBeat) {
+    var WampClient = function (heartBeat, alwaysReconnect) {
         if (!(this instanceof WampClient)) {
             return new WampClient(heartBeat);
         }
         var self = this;
         self._wsClient = null;
         self._heartBeat = heartBeat;
+        self._alwaysReconnect = alwaysReconnect;
         self._subscribeHandlers = {};
         self._callHandlers = {};
         self._heartBeatHandlers = {};
@@ -70,6 +71,7 @@
     // backwards-compatibility for the old `require()` API. If we're in
     // the browser, add `WampClient` as a global object.
     if (typeof exports !== 'undefined') {
+        var WebSocket = require('ws');
         if (typeof module !== 'undefined' && module.exports) {
             exports = module.exports = WampClient;
         }
@@ -243,7 +245,7 @@
         self._callHandlers = {};
         self._heartBeatHandlers = {};
         clearInterval(self._hbInterval);
-        if (closeEvent.code === 1006) {
+        if (self._alwaysReconnect || closeEvent.code === 1000 || closeEvent.code === 1001) {
             self._subscribeHandlers = {};
             setTimeout(self._startReconnect.bind(self), helpers.getRandom(2, 4) * 1000);
         }
